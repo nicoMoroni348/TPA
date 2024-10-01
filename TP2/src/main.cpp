@@ -3,196 +3,122 @@
 #include <WiFiClientSecure.h>
 #include <UniversalTelegramBot.h>
 
-void manejarEntrada(const String& input);
-void manejarEntradaUsuario();
 
+// Definición de constantes y variables globales
 const char* WIFI_SSID  = "Wokwi-GUEST";
 const char* WIFI_PASSWORD = "";
 const char* BOT_TOKEN  = "7968370248:AAGJW2-cDjW_71rJGP-Z--uKA58N8ccysX4";
-
-const unsigned long BOT_MTBS = 1000; // mean time between scan messages
-
-
+const unsigned long BOT_MTBS = 500; // Tiempo entre escaneos de mensajes (en milisegundos)
 const int PIN_LED = 23;
 
-//Token de Telegram BOT se obtenienen desde Botfather en telegram
+
 WiFiClientSecure secured_client;
 UniversalTelegramBot bot(BOT_TOKEN, secured_client);
-unsigned long bot_lasttime;          // last time messages' scan has been done
+unsigned long tiempo_ultimo_mensaje ; // Tiempo del último escaneo de mensajes
 bool Start = false;
 
 
-void handleNewMessages(int numNewMessages)
-{
-  // Serial.println("handleNewMessages");
-  // Serial.println(String(numNewMessages));
+// Funciones declaradas
+void conectarWifi();
+void sincronizarTiempoNTP();
+void manejarMensajesTelegram(int numMensajesNuevos);
+void configurarBotTelegram();
+void procesarComandosTelegram(const String& chat_id, const String& mensaje, const String& nombre_usuario);
+void encenderLed();
+void apagarLed();
 
-  for (int i = 0; i < numNewMessages; i++)
-  {
+
+void manejarMensajesTelegram(int numMensajesNuevos) {
+  for (int i = 0; i < numMensajesNuevos; i++) {
     String chat_id = bot.messages[i].chat_id;
     String text = bot.messages[i].text;
-
     String from_name = bot.messages[i].from_name;
+
     if (from_name == "")
       from_name = "Guest";
 
-    if (text == "/ledon")
-    {
-      Serial.println("LED encendido");
-      digitalWrite(PIN_LED, HIGH);
-      bot.sendMessage(chat_id, "LED encendido!", "");
-    } 
-    else if (text == "/ledoff") 
-    {
-      Serial.println("LED apagado");
-      digitalWrite(PIN_LED, LOW);
-      bot.sendMessage(chat_id, "LED apagado!", "");
-    } 
-    else if (text == "/send_test_action")
-    {
-      bot.sendChatAction(chat_id, "typing");
-      delay(4000);
-      bot.sendMessage(chat_id, "Did you see the action message?");
-    }
-
-    if (text == "/start")
-    {
-      String welcome = "Welcome to Universal Arduino Telegram Bot library, " + from_name + ".\n";
-      welcome += "This is Chat Action Bot example.\n\n";
-      welcome += "/send_test_action : to send test chat action message\n";
-      bot.sendMessage(chat_id, welcome);
-    }
+    procesarComandosTelegram(chat_id, text, from_name);  // Procesa los comandos recibidos
   }
 }
 
-void setup()
-{
-  Serial.begin(115200);
-  Serial.println();
+void setup() {
+  Serial.begin(115200);  // Inicializa el monitor serial
+  pinMode(PIN_LED, OUTPUT);  // Configura el pin del LED como salida
 
-  pinMode(PIN_LED, OUTPUT);
-  // attempt to connect to Wifi network:
-  Serial.print("Connecting to Wifi SSID ");
-  Serial.print(WIFI_SSID);
+  conectarWifi();  // Conecta a la red Wi-Fi
+  sincronizarTiempoNTP();  // Sincroniza la hora con NTP
+  // configurarBotTelegram();  // Configura el bot de Telegram
+
+}
+
+void loop() {
+  if (millis() - tiempo_ultimo_mensaje  > BOT_MTBS) {
+    int numMensajesNuevos = bot.getUpdates(bot.last_message_received + 1);
+
+    while (numMensajesNuevos) {
+      manejarMensajesTelegram(numMensajesNuevos); // Procesa los mensajes nuevos
+      numMensajesNuevos = bot.getUpdates(bot.last_message_received + 1); // Actualiza el contador de mensajes
+    }
+    tiempo_ultimo_mensaje  = millis();
+  }
+}
+
+
+void procesarComandosTelegram(const String& chat_id, const String& mensaje, const String& nombre_usuario) {
+  if (mensaje == "/ledon") {
+    encenderLed();
+    Serial.println("LED encendido");
+    bot.sendMessage(chat_id, "Led encendido", "");
+  }
+  else if (mensaje == "/ledoff") {
+    apagarLed();
+    Serial.println("LED apagado");
+    bot.sendMessage(chat_id, "Led apagado", "");
+  }
+  else {
+    String respuesta = "Hola " + nombre_usuario + ", soy un bot que controla un led. Puedes encenderlo con /ledon y apagarlo con /ledoff";
+    bot.sendMessage(chat_id, respuesta, "");
+  }
+}
+
+void encenderLed() {
+  digitalWrite(PIN_LED, HIGH);
+}
+
+void apagarLed() {
+  digitalWrite(PIN_LED, LOW);
+}
+
+// Función para conectarse a la red Wi-Fi
+void conectarWifi() {
+  Serial.print("Conectando a la red Wi-Fi: ");
+  Serial.println(WIFI_SSID);
+
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   secured_client.setCACert(TELEGRAM_CERTIFICATE_ROOT); // Add root certificate for api.telegram.org
+
   while (WiFi.status() != WL_CONNECTED)
   {
     Serial.print(".");
     delay(500);
   }
-  Serial.print("\nWiFi connected. IP address: ");
+  Serial.println("\nWiFi conectado. Dirección IP: ");
   Serial.println(WiFi.localIP());
 
-  Serial.print("Retrieving time: ");
-  configTime(0, 0, "pool.ntp.org"); // get UTC time via NTP
-  time_t now = time(nullptr);
-  while (now < 24 * 3600)
-  {
+}
+
+// Función para sincronizar la hora utilizando NTP
+void sincronizarTiempoNTP() {
+  Serial.print("Obteniendo la hora mediante NTP...");
+
+  configTime(0, 0, "pool.ntp.org");  // Configura NTP con UTC
+  time_t ahora = time(nullptr);
+
+  while (ahora < 24 * 3600) {
     Serial.print(".");
     delay(100);
-    now = time(nullptr);
+    ahora = time(nullptr);
   }
-  Serial.println(now);
+
+  Serial.println("\n\nTiempo sincronizado.");
 }
-
-void loop()
-{
-  if (millis() - bot_lasttime > BOT_MTBS)
-  {
-    int numNewMessages = bot.getUpdates(bot.last_message_received + 1);
-
-    while (numNewMessages)
-    {
-      Serial.println("got response");
-      handleNewMessages(numNewMessages);
-      numNewMessages = bot.getUpdates(bot.last_message_received + 1);
-    }
-
-    bot_lasttime = millis();
-  }
-}
-
-
-// void setup() {
-//    Serial.begin(115200);
-//    pinMode(PIN_LED, OUTPUT);
-
-//    WiFi.begin(SSID, PASS);
-
-//    // secured_client.setCACert(TELEGRAM_CERTIFICATE_ROOT); //Agregar certificado raíz para api.telegram.org
-   
-//    while (WiFi.status() != WL_CONNECTED) {
-//        delay(500);
-//        Serial.print(".");
-//    }
-//    Serial.println("");
-//    Serial.println("WiFi conectado");
-//    Serial.println(WiFi.localIP());
-// }
-
-
-// // void mensajesNuevos(int numerosMensajes)
-// // {
-// //   for (int i = 0; i < numerosMensajes; i++)
-// //   {
-// //     String chat_id = bot.messages[i].chat_id;
-// //     String text = bot.messages[i].text;
-// //     Serial.println(text);
-
-// //     if (text == "/ledon")
-// //     {
-// //       digitalWrite(PIN_LED, HIGH); // 
-// //       bot.sendMessage(chat_id, "LED encendido!", "");
-// //     }
- 
-// //     if (text == "/ledoff")
-// //     {
-// //       digitalWrite(PIN_LED, LOW); // 
-// //       bot.sendMessage(chat_id, "LED apagado!", "");
-// //     }
-// //   }
-// // }
- 
- 
-// void loop()
-// {
-//   // manejarEntradaUsuario();
-//   //Verifica si hay datos nuevos en telegram cada 1 segundo
-//   // if (millis() - tiempoAnterior > tiempo)
-//   // {
-//   //   int numerosMensajes = bot.getUpdates(bot.last_message_received + 1);
- 
-//   //   while (numerosMensajes)
-//   //   {
-//   //     Serial.println("Comando recibido");
-//   //     mensajesNuevos(numerosMensajes);
-//   //     numerosMensajes = bot.getUpdates(bot.last_message_received + 1);
-//   //   }
- 
-//   //   tiempoAnterior = millis();
-//   // }
-  
-// }
-
-// void manejarEntradaUsuario() {
-//   if (Serial.available()) {
-//     String opcionIngresada = Serial.readStringUntil('\n');
-//     opcionIngresada.trim();
-//     manejarEntrada(opcionIngresada);
-//   }
-// }
-
-
-// void manejarEntrada(const String& input) {
-//   if (input == "/ledon") {
-//     Serial.println("Led encendido");
-//     digitalWrite(PIN_LED, HIGH);
-//   } else if (input == "/ledoff") {
-//     Serial.println("Led apagado");
-//     digitalWrite(PIN_LED, LOW);
-//   } else {
-//     Serial.println("Opcion incorrecta");
-//   }
-
-// }
