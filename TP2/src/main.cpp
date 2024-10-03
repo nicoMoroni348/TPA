@@ -1,31 +1,38 @@
 #include <Arduino.h>
 #include <WiFi.h>
+#include <WiFiClient.h>
 #include <WiFiClientSecure.h>
 #include <UniversalTelegramBot.h>
 #include <DHT.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_SH110X.h>
 #include <Wire.h>
-
+#include <ThingSpeak.h>
 
 // Definición de constantes y variables globales
 const char *WIFI_SSID = "Wokwi-GUEST"; // AndroidAP2992
 const char *WIFI_PASSWORD = "";        // q1w2e3r4t5
 const char *BOT_TOKEN = "7968370248:AAGJW2-cDjW_71rJGP-Z--uKA58N8ccysX4";
 const unsigned long BOT_MTBS = 1000; // Tiempo entre escaneos de mensajes (en milisegundos)
-#define PIN_LED23 23                 // Pin donde está conectado el LED
-#define PIN_LED2 2                   // Pin donde está conectado el LED
-#define PIN_POT 32                   // Pin donde está conectado el potenciómetro
-#define SENSOR 33                    // Pin donde está conectado el sensor DHT22
-#define I2C_ADDRESS 0x3C             // Dirección I2C del display
+unsigned long channelID = 2670807;
+const char *WriteAPIKey = "5O5DX1BTSAM7TLS5";
+
+// Definicion de pineado de la placa
+#define PIN_LED23 23     // Pin donde está conectado el LED
+#define PIN_LED2 2       // Pin donde está conectado el LED
+#define PIN_POT 32       // Pin donde está conectado el potenciómetro
+#define SENSOR 33        // Pin donde está conectado el sensor DHT22
+#define I2C_ADDRESS 0x3C // Dirección I2C del display
 
 DHT sensor(SENSOR, DHT22);
 Adafruit_SH1106G display(128, 64, &Wire, -1);
 
+WiFiClient client;
 WiFiClientSecure secured_client;
 UniversalTelegramBot bot(BOT_TOKEN, secured_client);
 unsigned long tiempo_ultimo_mensaje; // Tiempo del último escaneo de mensajes
 bool Start = false;
+String tiempo_milis;
 
 // Funciones declaradas
 void conectarWifi();
@@ -36,6 +43,8 @@ void encenderLed(int pin);
 void apagarLed(int pin);
 void inicializarDisplay();
 void actualizarDisplay(const String &mensaje, int tiempoVisible);
+String obtenerTiempoFormateado(unsigned long millis);
+void mostrarLog(const String &mensaje);
 
 void manejarMensajesTelegram(int numMensajesNuevos)
 {
@@ -45,10 +54,6 @@ void manejarMensajesTelegram(int numMensajesNuevos)
     String chat_id = bot.messages[i].chat_id;
     String text = bot.messages[i].text;
     String from_name = bot.messages[i].from_name;
-
-    // Serial.println("Chat ID: " + chat_id);
-    // Serial.println("Mensaje: " + text);
-    // Serial.println("Nombre: " + from_name);
 
     if (from_name == "")
       from_name = "Guest";
@@ -66,10 +71,13 @@ void setup()
   conectarWifi();         // Conecta a la red Wi-Fi
   sincronizarTiempoNTP(); // Sincroniza la hora con NTP
   inicializarDisplay();   // Inicializa el display OLED
+  
+  ThingSpeak.begin(client); // Inicializa la comunicación con ThingSpeak
 }
 
 void loop()
 {
+  actualizarDisplay("Esperando mensajes...", 0); // Muestra un mensaje en el display
   if (millis() - tiempo_ultimo_mensaje > BOT_MTBS)
   {                                                                        // Comprueba si ha pasado el tiempo de escaneo
     int numMensajesNuevos = bot.getUpdates(bot.last_message_received + 1); // Obtiene los mensajes nuevos
@@ -93,7 +101,8 @@ void actualizarDisplay(const String &mensaje, int tiempoVisible)
 
   if (tiempoVisible != 0)
   {
-    delay(tiempoVisible); // Mantiene el mensaje visible durante "tiempoVisible" milisegundos
+    delay(tiempoVisible);
+    display.clearDisplay(); // Mantiene el mensaje visible durante "tiempoVisible" milisegundos
   }
 }
 
@@ -103,56 +112,56 @@ void procesarComandosTelegram(const String &chat_id, const String &mensaje, cons
   if (mensaje == "/start")
   {
     Start = true; // Habilitar todos los comandos
-    String welcomeMessage = "Bienvenido " + nombre_usuario + "!\n\n";
-    welcomeMessage += "Ahora puedes utilizar los siguientes comandos:\n";
-    welcomeMessage += "/led23<on/off> - Controlar el LED Verde\n";
-    welcomeMessage += "/led2<on/off> - Controlar el LED Azul\n";
-    welcomeMessage += "/dht22 - Leer sensor DHT22\n";
-    welcomeMessage += "/pote - Leer potenciómetro\n";
-    welcomeMessage += "/platiot - Enviar datos a IoT\n";
-    welcomeMessage += "/display<component> - Mostrar estado del componente\n";
+    String welcomeMessage = "¡Hola, " + nombre_usuario + "! 🎉\n\n";
+    welcomeMessage += "Qué bueno verte por acá. A continuación te dejo los comandos que podés usar:\n\n";
+    welcomeMessage += "💡🟢 /led23<on/off> - Controla el LED Verde\n\n";
+    welcomeMessage += "💡🔵 /led2<on/off> - Controla el LED Azul\n\n";
+    welcomeMessage += "🌡️ /dht22 - Obtén lecturas del sensor DHT22\n\n";
+    welcomeMessage += "🎚️ /pote - Lee el valor potenciómetro\n\n";
+    welcomeMessage += "📡 /platiot - Envía datos a IoT\n\n";
+    welcomeMessage += "🖥️ /display<component> - Muestra el estado del componente\n\n";
+    welcomeMessage += "¡¿Listo para comenzar?! ¡Elegí el comando que vos quiera!";
     bot.sendMessage(chat_id, welcomeMessage, "");
-    Serial.println("Comandos disponibles enviados");
-    Start = true;
+    mostrarLog("Se ha iniciado la conversación con el usuario " + nombre_usuario);
   }
   if (!Start)
   {
-    bot.sendMessage(chat_id, "Primero inicialice con el comando /start para acceder a las funcionalidades", "");
+    bot.sendMessage(chat_id, "⚠️ Para empezar, por favor inicializá con el comando /start para acceder a todas las funcionalidades disponibles🚀", "");
   }
   else
   {
     if (mensaje == "/led23on")
     {
       encenderLed(PIN_LED23);
-      Serial.println("LED 23 encendido");
-      bot.sendMessage(chat_id, "Led 23 encendido", "");
+      mostrarLog("LED 23 encendido");
+      bot.sendMessage(chat_id, "💡🟢 Led 23 encendido.", "");
     }
     else if (mensaje == "/led23off")
     {
       apagarLed(PIN_LED23);
-      Serial.println("LED 23 apagado");
-      bot.sendMessage(chat_id, "Led 23 apagado", "");
+      mostrarLog("LED 23 apagado");
+      bot.sendMessage(chat_id, "💡🟢 Led 23 apagado", "");
     }
     else if (mensaje == "/led2on")
     {
       encenderLed(PIN_LED2);
-      Serial.println("LED 2 encendido");
-      bot.sendMessage(chat_id, "Led 2 encendido", "");
+      mostrarLog("LED 2 encendido");
+      bot.sendMessage(chat_id, "💡🔵 Led 2 encendido", "");
     }
     else if (mensaje == "/led2off")
     {
       apagarLed(PIN_LED2);
-      Serial.println("LED 2 apagado");
-      bot.sendMessage(chat_id, "Led 2 apagado", "");
+      mostrarLog("LED 2 apagado");
+      bot.sendMessage(chat_id, "💡🔵 Led 2 apagado", "");
     }
     else if (mensaje == "/dht22") // ESTE VA CON THINGSPEAK
     {
       // leer sensor DHT22
-      Serial.println("Leyendo sensor DHT22...");
+      mostrarLog("Leyendo sensor DHT22...");
       float humedad = sensor.readHumidity();
       float temperatura = sensor.readTemperature();
-      String respuesta = "Humedad: " + String(humedad) + "%\n";
-      respuesta += "Temperatura: " + String(temperatura) + "°C";
+      String respuesta = "🌡️Humedad: " + String(humedad) + "%\n";
+      respuesta += "🌡️Temperatura: " + String(temperatura) + "°C";
       bot.sendMessage(chat_id, respuesta);
     }
     else if (mensaje == "/pote")
@@ -161,56 +170,83 @@ void procesarComandosTelegram(const String &chat_id, const String &mensaje, cons
       int valor_analogico = analogRead(PIN_POT);        // Lee el valor analógico del pin
       float voltaje = (valor_analogico / 4095.0) * 3.3; // Convierte el valor a voltaje (0-3.3V)
 
-      String mensaje_pote = "El valor del potenciómetro es: " + String(voltaje) + "V";
+      String mensaje_pote = "🎚️El valor del potenciómetro es: " + String(voltaje) + "V";
 
-      Serial.println(mensaje_pote);
+      mostrarLog(mensaje_pote);
       bot.sendMessage(chat_id, mensaje_pote, ""); // Envía el valor del potenciómetro al chat
     }
     else if (mensaje == "/platiot")
     {
       // enviar datos a IoT
-      Serial.println("Enviando datos a IoT...");
-      bot.sendMessage(chat_id, "Enviando datos a IoT...", "");
-    }
-    else if (mensaje == "/displayled2")
-    {
-      String estado_led23 = (digitalRead(PIN_LED23) == HIGH) ? "Encendido" : "Apagado";
-      actualizarDisplay("LED 23: " + estado_led23, 5000);
-      Serial.println("Mostrando estado del LED 23 en OLED...");
-      bot.sendMessage(chat_id, "Mostrando estado del LED 23 en OLED...", "");
-    }
-    else if (mensaje == "/displayled23")
-    {
-      String estado_led2 = (digitalRead(PIN_LED2) == HIGH) ? "Encendido" : "Apagado";
-      actualizarDisplay("LED 2: " + estado_led2, 5000);
-      Serial.println("Mostrando estado del LED 2 en OLED...");
-      bot.sendMessage(chat_id, "Mostrando estado del LED 2 en OLED...", "");
-    }
-    else if (mensaje == "/displaypote")
-    {
-      int valor_analogico = analogRead(PIN_POT);        // Lee el valor analógico del pin
-      float voltaje = (valor_analogico / 4095.0) * 3.3; // Convierte el valor a voltaje (0-3.3V)
-      String mensaje_pote = "Potenciometro: " + String(voltaje) + "V";
-      actualizarDisplay(mensaje_pote, 5000);
-      Serial.println("Mostrando estado del potenciómetro en OLED...");
-      bot.sendMessage(chat_id, "Mostrando estado del potenciómetro en OLED...", "");
-    }
-    else if (mensaje == "/displaysensor")
-    {
+      mostrarLog("Enviando datos a ThingSpeak...");
+      bot.sendMessage(chat_id, "📡Enviando datos a ThingSpeak...", "");
+
       float humedad = sensor.readHumidity();
       float temperatura = sensor.readTemperature();
-      String mensaje_sensor = "Humedad: " + String(humedad) + "%\n";
-      mensaje_sensor += "Temperatura: " + String(temperatura) + " C";
-      actualizarDisplay(mensaje_sensor, 5000);
 
-      Serial.println("Mostrando estado del sensor DHT22 en OLED...");
-      bot.sendMessage(chat_id, "Mostrando estado del sensor DHT22 en OLED...", "");
+      ThingSpeak.setField(1, temperatura);
+      ThingSpeak.setField(2, humedad);
+
+      int responseCode = ThingSpeak.writeFields(channelID, WriteAPIKey);
+      if (responseCode == 200)
+      {
+        mostrarLog("Datos enviados a ThingSpeak!");
+        bot.sendMessage(chat_id, "✅ Datos enviados a ThingSpeak!\n✅ Puedes visualizarlo en https://thingspeak.com/channels/2670807", "");
+      }
+      else
+      {
+        mostrarLog("Error al enviar datos: ");
+        bot.sendMessage(chat_id, "❌ Error al enviar datos a ThingSpeak!", "");
+        Serial.println("ERROR | " + String(responseCode));
+      }
     }
+    else if (mensaje.startsWith("/display"))
+    {
+      if (mensaje == "/displayled23")
+      {
+        String estado_led23 = (digitalRead(PIN_LED23) == HIGH) ? "Encendido" : "Apagado";
+        mostrarLog("Mostrando estado del LED 23 en OLED...");
+        bot.sendMessage(chat_id, "🖥️ Mostrando estado del LED 23 en OLED...", "");
+        actualizarDisplay("LED 23: " + estado_led23, 5000);
+      }
+      else if (mensaje == "/displayled2")
+      {
+        String estado_led2 = (digitalRead(PIN_LED2) == HIGH) ? "Encendido" : "Apagado";
+        mostrarLog("Mostrando estado del LED 2 en OLED...");
+        bot.sendMessage(chat_id, "🖥️ Mostrando estado del LED 2 en OLED...", "");
+        actualizarDisplay("LED 2: " + estado_led2, 5000);
+      }
+      else if (mensaje == "/displaypote")
+      {
+        int valor_analogico = analogRead(PIN_POT);        // Lee el valor analógico del pin
+        float voltaje = (valor_analogico / 4095.0) * 3.3; // Convierte el valor a voltaje (0-3.3V)
+        String mensaje_pote = "🎚️ Potenciometro: " + String(voltaje) + "V";
+        mostrarLog("Mostrando estado del potenciómetro en OLED...");
+        bot.sendMessage(chat_id, "🖥️ Mostrando estado del potenciómetro en OLED...", "");
+        actualizarDisplay(mensaje_pote, 5000);
+      }
+      else if (mensaje == "/displaysensor")
+      {
+        float humedad = sensor.readHumidity();
+        float temperatura = sensor.readTemperature();
+        String mensaje_sensor = "🌡️ Humedad: " + String(humedad) + "%\n";
+        mensaje_sensor += "🌡️ Temperatura: " + String(temperatura) + " C";
+        actualizarDisplay(mensaje_sensor, 5000);
 
+        mostrarLog("Mostrando estado del sensor DHT22 en OLED...");
+        bot.sendMessage(chat_id, "🖥️ Mostrando estado del sensor DHT22 en OLED...", "");
+      }
+      else
+      {
+        String mensaje_error = "Display Invalido";
+        bot.sendMessage(chat_id, mensaje_error, "");
+        actualizarDisplay(mensaje_error, 5000);
+      }
+    } // Fin de la sección de comandos de display
     else
     {
-      String respuesta = "Hola " + nombre_usuario + ", soy un bot que controla la placa ESP32. Puedes acceder a más información con el comando /start.";
-      bot.sendMessage(chat_id, respuesta, "");
+      String mensaje_error = "Comando Invalido";
+      bot.sendMessage(chat_id, mensaje_error, "");
     }
   }
 }
@@ -239,14 +275,15 @@ void conectarWifi()
     Serial.print(".");
     delay(500);
   }
-  Serial.println("\nWiFi conectado. Dirección IP: ");
-  Serial.println(WiFi.localIP());
+  Serial.println("WiFi conectado.");
+  Serial.print("Dirección IP: ");
+  -Serial.println(WiFi.localIP());
 }
 
 // Función para sincronizar la hora utilizando NTP
 void sincronizarTiempoNTP()
 {
-  Serial.print("Obteniendo la hora mediante NTP...");
+  Serial.println("Obteniendo la hora mediante NTP");
 
   configTime(0, 0, "pool.ntp.org"); // Configura NTP con UTC
   time_t ahora = time(nullptr);
@@ -274,5 +311,21 @@ void inicializarDisplay()
   display.setTextColor(SH110X_WHITE);
   display.setCursor(0, 0);
   display.println("Bienvenido");
+  delay(1000);
   display.display();
+}
+
+// Imprimir logs en el monitor serial
+String obtenerTiempoFormateado(unsigned long millis)
+{
+  unsigned long seconds = millis / 1000;
+  unsigned long minutes = (seconds / 60) % 60;
+
+  return String(minutes) + "m " + String(seconds % 60) + "s | INFO | ";
+}
+
+void mostrarLog(const String &mensaje)
+{
+  tiempo_milis = obtenerTiempoFormateado(millis());
+  Serial.println(tiempo_milis + mensaje);
 }
