@@ -19,7 +19,7 @@
       "attrs": { "color": "blue" }
     },
     { "type": "wokwi-dht22", "id": "dht1", "top": -28.5, "left": -139.8, "attrs": {} },
-    { "type": "wokwi-potentiometer", "id": "pot1", "top": -145.3, "left": -86.6, "attrs": {} },
+    { "type": "wokwi-potentiometer", "id": "pot1", "top": -154.9, "left": -77, "attrs": {} },
     {
       "type": "board-ssd1306",
       "id": "oled1",
@@ -36,7 +36,6 @@
     [ "led2:A", "esp:2", "green", [ "v201.6", "h-177.64" ] ],
     [ "led2:C", "esp:GND.2", "black", [ "h0.4", "v67.2" ] ],
     [ "dht1:VCC", "esp:5V", "red", [ "v115.2", "h206.21" ] ],
-    [ "dht1:GND", "esp:GND.1", "black", [ "v9.6", "h-134.4", "v-268.8" ] ],
     [ "pot1:VCC", "esp:5V", "red", [ "v0" ] ],
     [ "pot1:GND", "esp:GND.1", "black", [ "v0" ] ],
     [ "oled1:GND", "esp:GND.1", "black", [ "v-19.2", "h-57.6", "v-144" ] ],
@@ -44,7 +43,8 @@
     [ "oled1:SDA", "esp:21", "yellow", [ "v-19.2", "h57.67", "v-220.8" ] ],
     [ "esp:22", "oled1:SCL", "green", [ "h14.44", "v240", "h-48.3" ] ],
     [ "esp:33", "dht1:SDA", "green", [ "h0" ] ],
-    [ "pot1:SIG", "esp:32", "green", [ "v0" ] ]
+    [ "pot1:SIG", "esp:32", "green", [ "v0" ] ],
+    [ "esp:GND.1", "dht1:GND", "black", [ "h0" ] ]
   ],
   "dependencies": {}
 }
