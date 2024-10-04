@@ -30,6 +30,7 @@ private:
     void manejarComandoPote(const String& chat_id);
     void manejarComandoDisplay(const String& chat_id, const String& mensaje);
     void manejarComandoPlatiot(const String& chat_id);
+    void descartarMensajesPendientes();
     
     UniversalTelegramBot bot;
     unsigned long tiempo_ultimo_mensaje;

@@ -12,7 +12,13 @@ TelegramBot::TelegramBot(const String &botToken, WiFiClientSecure &securedClient
 
 void TelegramBot::iniciarBot()
 {
-    bot.sendMessage("CHAT_ID", "Bot inicializado!", "");
+    int numMensajesPendientes = bot.getUpdates(bot.last_message_received + 1);
+    while (numMensajesPendientes)
+    {
+        numMensajesPendientes = bot.getUpdates(bot.last_message_received + 1);
+    }
+
+    bot.sendMessage("-4542379264", "🤖 Bot inicializado!", "");
 }
 
 void TelegramBot::manejarMensajesTelegram()
@@ -73,7 +79,7 @@ void TelegramBot::procesarComandosTelegram(const String &chat_id, const String &
     }
     else
     {
-        bot.sendMessage(chat_id, "Comando Invalido", "");
+        bot.sendMessage(chat_id, "❌ Comando Invalido", "");
     }
 }
 
@@ -88,7 +94,7 @@ void TelegramBot::manejarComandoStart(const String &chat_id, const String &nombr
     welcomeMessage += "🎚️ /pote - Lee el valor potenciómetro\n\n";
     welcomeMessage += "📡 /platiot - Envía datos a IoT\n\n";
     welcomeMessage += "🖥️ /display<component> - Muestra el estado del componente\n\n";
-    welcomeMessage += "¡¿Listo para comenzar?! ¡Elegí el comando que vos quiera!";
+    welcomeMessage += "¡¿Listo para comenzar?! ¡Elegí el comando que vos quieras!";
     bot.sendMessage(chat_id, welcomeMessage, "");
     enviarLogSerial("Se ha iniciado la conversación con el usuario " + nombre_usuario);
 }
@@ -98,26 +104,30 @@ void TelegramBot::manejarComandoLed(const String &chat_id, const String &mensaje
     if (mensaje == "/led23on")
     {
         led23.encenderLed();
-        bot.sendMessage(chat_id, "LED 23 encendido", "");
+        bot.sendMessage(chat_id, "💡🟢 LED 23 encendido", "");
         enviarLogSerial("LED 23 encendido");
     }
     else if (mensaje == "/led23off")
     {
         led23.apagarLed();
-        bot.sendMessage(chat_id, "LED 23 apagado", "");
+        bot.sendMessage(chat_id, "💡🟢 LED 23 apagado", "");
         enviarLogSerial("LED 23 apagado");
     }
     else if (mensaje == "/led2on")
     {
         led2.encenderLed();
-        bot.sendMessage(chat_id, "LED 2 encendido", "");
+        bot.sendMessage(chat_id, "💡🔵 LED 2 encendido", "");
         enviarLogSerial("LED 2 encendido");
     }
     else if (mensaje == "/led2off")
     {
         led2.apagarLed();
-        bot.sendMessage(chat_id, "LED 2 apagado", "");
+        bot.sendMessage(chat_id, "💡🔵 LED 2 apagado", "");
         enviarLogSerial("LED 2 apagado");
+    }
+    else
+    {
+        bot.sendMessage(chat_id, "❌ Comando Invalido", "");
     }
 }
 
@@ -125,8 +135,8 @@ void TelegramBot::manejarComandoDHT22(const String &chat_id)
 {
     float humedad = sensor.leerHumedad();
     float temperatura = sensor.leerTemperatura();
-    String mensaje = "Humedad: " + String(humedad) + "%\n";
-    mensaje += "Temperatura: " + String(temperatura) + "°C";
+    String mensaje = "☁️ Humedad: " + String(humedad) + "%\n";
+    mensaje += "🌡️ Temperatura: " + String(temperatura) + "°C";
     bot.sendMessage(chat_id, mensaje, "");
     enviarLogSerial("Datos del sensor DHT22 enviados");
 }
@@ -136,7 +146,7 @@ void TelegramBot::manejarComandoPote(const String &chat_id)
     float voltaje = potenciometro.leerVoltaje(3.3);
     Serial.println("Potenciómetro: " + String(voltaje) + "V");
     Serial.println("Valor potenciometro: " + String(potenciometro.leerValor()));
-    String mensaje = "Potenciómetro: " + String(voltaje) + "V";
+    String mensaje = "🎛️ Potenciómetro: " + String(voltaje) + "V";
     bot.sendMessage(chat_id, mensaje, "");
     enviarLogSerial("Datos del potenciómetro enviados");
 }
@@ -146,14 +156,14 @@ void TelegramBot::manejarComandoDisplay(const String &chat_id, const String &men
     if (mensaje == "/displayled23")
     {
         String estado_led23 = led23.leerEstado();
-        bot.sendMessage(chat_id, "LED 23: " + estado_led23, "");
+        bot.sendMessage(chat_id, "💡🟢 LED 23: " + estado_led23, "");
         display.actualizarDisplay("LED 23: " + estado_led23, 5000);
         enviarLogSerial("Datos mostrados en display");
     }
     else if (mensaje == "/displayled2")
     {
         String estado_led2 = led2.leerEstado();
-        bot.sendMessage(chat_id, "LED 2: " + estado_led2, "");
+        bot.sendMessage(chat_id, "💡🔵 LED 2: " + estado_led2, "");
         display.actualizarDisplay("LED 2: " + estado_led2, 5000);
         enviarLogSerial("Datos mostrados en display");
     }
@@ -161,7 +171,7 @@ void TelegramBot::manejarComandoDisplay(const String &chat_id, const String &men
     {
         float voltaje = potenciometro.leerVoltaje(3.3);
         Serial.println("Potenciómetro: " + String(voltaje) + "V");
-        bot.sendMessage(chat_id, "Potenciómetro: " + String(voltaje) + "V", "");
+        bot.sendMessage(chat_id, "🎛️ Potenciómetro: " + String(voltaje) + "V", "");
         display.actualizarDisplay("Potenciometro: " + String(voltaje) + "V", 5000);
         enviarLogSerial("Datos mostrados en display");
     }
@@ -169,15 +179,15 @@ void TelegramBot::manejarComandoDisplay(const String &chat_id, const String &men
     {
         float humedad = sensor.leerHumedad();
         float temperatura = sensor.leerTemperatura();
-        String mensaje_sensor = "🌡️ Humedad: " + String(humedad) + "%\n";
+        String mensaje_sensor = "☁️ Humedad: " + String(humedad) + "%\n";
         mensaje_sensor += "🌡️ Temperatura: " + String(temperatura) + " C";
         bot.sendMessage(chat_id, mensaje_sensor, "");
-        display.actualizarDisplay(mensaje_sensor, 5000);
+        display.actualizarDisplay("Humedad: " + String(humedad) + "%\n" + "Temperatura: " + String(temperatura), 5000);
         enviarLogSerial("Datos mostrados en display");
     }
     else
     {
-        bot.sendMessage(chat_id, "Comando Display Invalido", "");
+        bot.sendMessage(chat_id, "❌ Comando Display Invalido", "");
         display.actualizarDisplay("Comando Display Invalido", 5000);
     }
 }
@@ -201,7 +211,7 @@ void TelegramBot::manejarComandoPlatiot(const String &chat_id)
     }
     else
     {
-        bot.sendMessage(chat_id, "Error al enviar datos: " + String(responseCode), "");
+        bot.sendMessage(chat_id, "❌ Error al enviar datos: " + String(responseCode), "");
         enviarLogSerial("Error al enviar datos: " + String(responseCode));
     }
 }
